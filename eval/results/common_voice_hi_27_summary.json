@@ -1,0 +1,15 @@
+{
+    "dataset": "Mozilla Common Voice Scripted Speech 27.0",
+    "locale": "hi",
+    "model": "prisma-v3.0",
+    "total_recordings": 10,
+    "successful_recordings": 10,
+    "failed_recordings": 0,
+    "reference_word_count": 80,
+    "substitutions": 7,
+    "deletions": 1,
+    "insertions": 3,
+    "total_word_errors": 11,
+    "overall_wer": 0.1375,
+    "average_api_processing_time": 0.29058089256286623
+}

@@ -1,0 +1,25 @@
+@'
+# Secrets and Python environment
+.env
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local recordings and generated audio
+data/raw/recordings/
+data/degraded/
+data/sample.wav
+data/sample.m4a
+
+# Personal recording metadata, transcripts and acoustic features
+data/datasets/recordings.jsonl
+data/feature_history.jsonl
+data/processed/transcripts/
+data/processed/baseline.json
+
+# Python and test caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+'@ | Set-Content .gitignore -Encoding utf8
+data/processed/baseline.json
