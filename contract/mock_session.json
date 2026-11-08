@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0",
+  "session_id": "SESSION_001",
+  "assessment_id": "ASSESSMENT_001",
+  "participant_id": "P001",
+  "timestamp": "2026-11-08T18:00:00+05:30",
+  "recording": {
+    "recording_id": "REC_001",
+    "filename": "sample_audio.wav",
+    "sample_rate": 16000,
+    "channels": 1,
+    "duration_seconds": 18.5,
+    "audio_quality": "good",
+    "source": "synthetic_demo"
+  },
+  "transcription": {
+    "model": "prisma-v3.0",
+    "language": "en-IN",
+    "text": "Hello, I am testing the VoxSense voice monitoring system.",
+    "status": "completed",
+    "timestamps": null,
+    "timestamp_type": "not_available_from_rest"
+  },
+  "features": {
+    "speaking_rate": 3.2,
+    "mean_pause_duration": 0.35,
+    "pitch_mean": 145.2,
+    "pitch_variation": 24.0,
+    "rms_energy": 0.18
+  },
+  "baseline": {
+    "available": false,
+    "recordings_used": 0
+  },
+  "comparison": {
+    "speaking_rate_deviation": null,
+    "pause_duration_deviation": null,
+    "pitch_variation_deviation": null,
+    "rms_energy_deviation": null
+  },
+  "monitoring_status": "insufficient_baseline",
+  "recommendation": "Additional valid recordings are required to establish a personal baseline.",
+  "metadata": {
+    "data_type": "mock",
+    "is_clinically_validated": false
+  }
+}
