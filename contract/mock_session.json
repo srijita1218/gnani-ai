@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "session_id": "SESSION_001",
   "assessment_id": "ASSESSMENT_001",
   "participant_id": "P001",
@@ -26,7 +26,12 @@
     "mean_pause_duration": 0.35,
     "pitch_mean": 145.2,
     "pitch_variation": 24.0,
-    "rms_energy": 0.18
+    "rms_energy": 0.18,
+    "pause_ratio": 0.22,
+    "energy_variation": 0.55,
+    "jitter_local": 0.012,
+    "shimmer_local": 0.06,
+    "hnr_db": 16.5
   },
   "baseline": {
     "available": false,
