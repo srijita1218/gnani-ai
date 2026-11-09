@@ -1,14 +1,21 @@
-"""FastAPI app: /health, /patients, /sessions."""
+"""FastAPI app: /health, /patients, /sessions, /sessions/audio."""
 import json
 import sqlite3
+import tempfile
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 
+from .audio_pipeline import build_session_from_audio
 from .database import get_db, init_db
 from .schemas import PatientIn, PatientOut, SessionIn
+
+MAX_AUDIO_BYTES = 25 * 1024 * 1024
+ALLOWED_AUDIO_SUFFIXES = {".wav", ".mp3", ".flac"}
 
 
 @asynccontextmanager
@@ -17,15 +24,51 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="VoxSense API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="VoxSense API", version="0.2.0", lifespan=lifespan)
 
-# allow the Vite dev server to call the API
+# allow the Vite dev server and the Streamlit UI to call the API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:5173", "http://127.0.0.1:5173",
+        "http://localhost:8501", "http://127.0.0.1:8501",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---------------------------------------------------------------- helpers --
+
+def _require_consenting_patient(db: sqlite3.Connection, participant_id: str) -> None:
+    if not db.execute("SELECT 1 FROM patients WHERE id = ?", (participant_id,)).fetchone():
+        raise HTTPException(404, "Participant not found")
+    consent = db.execute(
+        "SELECT consent_given FROM consent WHERE patient_id = ? ORDER BY id DESC LIMIT 1",
+        (participant_id,),
+    ).fetchone()
+    if consent is None or not consent["consent_given"]:
+        raise HTTPException(403, "Participant has not given consent")
+
+
+def _store_session(db: sqlite3.Connection, payload: dict) -> dict:
+    session_id = payload.get("session_id") or str(uuid.uuid4())
+    payload["session_id"] = session_id
+    if db.execute("SELECT 1 FROM sessions WHERE id = ?", (session_id,)).fetchone():
+        raise HTTPException(409, f"Session {session_id} already exists")
+    db.execute(
+        "INSERT INTO sessions (id, patient_id, timestamp, payload) VALUES (?, ?, ?, ?)",
+        (session_id, payload["participant_id"], payload.get("timestamp"), json.dumps(payload)),
+    )
+    db.commit()
+    return payload
+
+
+# ----------------------------------------------------------------- routes --
+
+@app.get("/")
+def root():
+    return {"message": "VoxSense API", "docs": "/docs", "health": "/health"}
 
 
 @app.get("/health")
@@ -60,31 +103,48 @@ def create_patient(body: PatientIn, db: sqlite3.Connection = Depends(get_db)):
 
 @app.post("/sessions", status_code=201)
 def create_session(body: SessionIn, db: sqlite3.Connection = Depends(get_db)):
-    if not db.execute(
-        "SELECT 1 FROM patients WHERE id = ?", (body.participant_id,)
-    ).fetchone():
-        raise HTTPException(404, "Participant not found")
+    _require_consenting_patient(db, body.participant_id)
+    return _store_session(db, body.model_dump())
 
-    consent = db.execute(
-        "SELECT consent_given FROM consent WHERE patient_id = ? ORDER BY id DESC LIMIT 1",
-        (body.participant_id,),
-    ).fetchone()
-    if consent is None or not consent["consent_given"]:
-        raise HTTPException(403, "Participant has not given consent")
 
-    payload = body.model_dump()
-    session_id = payload.get("session_id") or str(uuid.uuid4())
-    payload["session_id"] = session_id
+@app.post("/sessions/audio", status_code=201)
+async def create_session_from_audio(
+    request: Request,
+    participant_id: str,
+    language: str = "indic-auto",
+    filename: str = "recording.wav",
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Raw audio bytes in the request body (no multipart needed).
 
-    if db.execute("SELECT 1 FROM sessions WHERE id = ?", (session_id,)).fetchone():
-        raise HTTPException(409, f"Session {session_id} already exists")
+    Extracts features, transcribes if possible, and saves a session. The audio
+    itself is processed from a temporary file that is deleted afterwards."""
+    _require_consenting_patient(db, participant_id)
 
-    db.execute(
-        "INSERT INTO sessions (id, patient_id, timestamp, payload) VALUES (?, ?, ?, ?)",
-        (session_id, body.participant_id, body.timestamp, json.dumps(payload)),
-    )
-    db.commit()
-    return payload
+    safe_name = Path(filename).name
+    suffix = Path(safe_name).suffix.lower()
+    if suffix not in ALLOWED_AUDIO_SUFFIXES:
+        raise HTTPException(415, f"Unsupported audio type '{suffix}'. Use .wav, .mp3 or .flac")
+
+    audio_bytes = await request.body()
+    if not audio_bytes:
+        raise HTTPException(400, "Request body is empty")
+    if len(audio_bytes) > MAX_AUDIO_BYTES:
+        raise HTTPException(413, "Audio file is larger than 25 MB")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / f"upload{suffix}"
+        path.write_bytes(audio_bytes)
+        try:
+            payload = await run_in_threadpool(
+                build_session_from_audio, path, participant_id, language, safe_name
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
+        except RuntimeError as exc:
+            raise HTTPException(503, str(exc))
+
+    return _store_session(db, payload)
 
 
 @app.get("/patients/{patient_id}/sessions")
