@@ -1,4 +1,6 @@
+
 """SQLite setup: connection helper, schema, FastAPI dependency."""
+
 import os
 import sqlite3
 from contextlib import closing
@@ -6,7 +8,7 @@ from pathlib import Path
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS patients (
-    id            TEXT PRIMARY KEY,       -- the participant_id, e.g. 'P001'
+    id            TEXT PRIMARY KEY,
     display_name  TEXT,
     created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -20,19 +22,36 @@ CREATE TABLE IF NOT EXISTS consent (
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
-    id            TEXT PRIMARY KEY,       -- the session_id, e.g. 'SESSION_001'
+    id            TEXT PRIMARY KEY,
     patient_id    TEXT NOT NULL REFERENCES patients(id),
-    timestamp     TEXT,                   -- from the session JSON
-    payload       TEXT NOT NULL,          -- full session JSON as sent
+    timestamp     TEXT,
+    payload       TEXT NOT NULL,
     created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_sessions_patient ON sessions(patient_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_patient
+ON sessions(patient_id);
+
+CREATE TABLE IF NOT EXISTS referrals (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id        TEXT NOT NULL UNIQUE REFERENCES sessions(id),
+    patient_id        TEXT NOT NULL REFERENCES patients(id),
+    domain            TEXT NOT NULL,
+    score             REAL NOT NULL,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    status            TEXT NOT NULL DEFAULT 'Pending',
+    clinician_note    TEXT NOT NULL,
+    patient_message   TEXT NOT NULL,
+    patient_language  TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_referrals_created
+ON referrals(created_at);
 """
 
 
 def db_path() -> str:
-    # read at call time so tests can point DB_PATH at a temp file
+    # Read at call time so tests can point DB_PATH at a temporary file.
     return os.environ.get("DB_PATH", "data/app.db")
 
 

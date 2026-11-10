@@ -56,3 +56,6 @@ def post_audio(base_url: str, participant_id: str, language: str, filename: str,
         params={"participant_id": participant_id, "language": language, "filename": filename},
         data=data, headers={"Content-Type": "application/octet-stream"},
     )
+
+def get_referrals(base_url: str) -> list:
+    return _call("GET", f"{base_url}/referrals", timeout=TIMEOUT_S)

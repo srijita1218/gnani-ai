@@ -296,6 +296,59 @@ def patient_page(mode, api_url):
 
 # ------------------------------------------------------------------- main --
 
+def referral_queue_page(mode, api_url):
+    st.header("4. Doctor Referral Queue")
+    st.caption("High-risk referrals for clinician review. Not a diagnostic system.")
+
+    if mode == DEMO:
+        st.info("The referral queue is available when connected to the live backend.")
+        return
+
+    try:
+        referrals = api_client.get_referrals(api_url)
+    except ApiError as err:
+        st.error(err.message)
+        return
+
+    if not referrals:
+        st.success("No pending referrals.")
+        return
+
+    st.metric("Total referrals", len(referrals))
+
+    df = pd.DataFrame([
+        {
+            "Patient": r["patient"],
+            "Domain": r["domain"],
+            "Score": round(r["score"], 3),
+            "Date": r["created_at"],
+            "Status": r["status"],
+        }
+        for r in referrals
+    ])
+
+    st.dataframe(df, hide_index=True, use_container_width=True)
+
+    st.subheader("Referral details")
+
+    for referral in referrals:
+        title = (
+            f'{referral["patient"]} | {referral["domain"]} | '
+            f'Score: {referral["score"]:.2f}'
+        )
+
+        with st.expander(title):
+            st.write(f'**Date:** {referral["created_at"]}')
+            st.write(f'**Status:** {referral["status"]}')
+            st.write(f'**Session:** {referral["session_id"]}')
+            st.markdown("**Clinician note**")
+            st.text(referral["clinician_note"])
+            st.markdown("**Patient message**")
+            st.write(referral["patient_message"])
+            st.caption(f'Patient language: {referral["patient_language"]}')
+
+
+
 def main():
     st.set_page_config(page_title="VoxSense", page_icon="🎙️", layout="wide")
     init_state()
@@ -304,6 +357,8 @@ def main():
         consent_page(mode, api_url)
     elif page == PAGES[1]:
         record_page(mode, api_url)
+    elif page == PAGES[3]:
+        referral_queue_page(mode, api_url)
     else:
         patient_page(mode, api_url)
 

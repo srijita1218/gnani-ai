@@ -12,6 +12,7 @@ from starlette.concurrency import run_in_threadpool
 
 from .audio_pipeline import build_session_from_audio
 from .database import get_db, init_db
+from .referrals import create_referral_if_high_risk, get_referral_queue
 from .schemas import PatientIn, PatientOut, SessionIn
 
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
@@ -54,13 +55,25 @@ def _require_consenting_patient(db: sqlite3.Connection, participant_id: str) -> 
 def _store_session(db: sqlite3.Connection, payload: dict) -> dict:
     session_id = payload.get("session_id") or str(uuid.uuid4())
     payload["session_id"] = session_id
-    if db.execute("SELECT 1 FROM sessions WHERE id = ?", (session_id,)).fetchone():
+
+    if db.execute(
+        "SELECT 1 FROM sessions WHERE id = ?", (session_id,)
+    ).fetchone():
         raise HTTPException(409, f"Session {session_id} already exists")
+
     db.execute(
         "INSERT INTO sessions (id, patient_id, timestamp, payload) VALUES (?, ?, ?, ?)",
-        (session_id, payload["participant_id"], payload.get("timestamp"), json.dumps(payload)),
+        (
+            session_id,
+            payload["participant_id"],
+            payload.get("timestamp"),
+            json.dumps(payload),
+        ),
     )
+
+    create_referral_if_high_risk(db, payload)
     db.commit()
+
     return payload
 
 
@@ -74,6 +87,11 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/referrals")
+def list_referrals(db: sqlite3.Connection = Depends(get_db)):
+    """Doctor's queue of high-risk session referrals."""
+    return get_referral_queue(db)
 
 
 @app.post("/patients", response_model=PatientOut, status_code=201)
